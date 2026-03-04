@@ -1,3 +1,5 @@
+import random
+from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
 Song = Dict[str, object]
@@ -10,6 +12,9 @@ DEFAULT_PROFILE = {
     "favorite_genre": "rock",
     "include_mixed": True,
 }
+
+HYPE_KEYWORDS = ["rock", "punk", "party"]
+CHILL_KEYWORDS = ["lofi", "ambient", "sleep"]
 
 
 def normalize_title(title: str) -> str:
@@ -61,17 +66,13 @@ def classify_song(song: Song, profile: Dict[str, object]) -> str:
     """Return a mood label given a song and user profile."""
     energy = song.get("energy", 0)
     genre = song.get("genre", "")
-    title = song.get("title", "")
 
     hype_min_energy = profile.get("hype_min_energy", 7)
     chill_max_energy = profile.get("chill_max_energy", 3)
     favorite_genre = profile.get("favorite_genre", "")
 
-    hype_keywords = ["rock", "punk", "party"]
-    chill_keywords = ["lofi", "ambient", "sleep"]
-
-    is_hype_keyword = any(k in genre for k in hype_keywords)
-    is_chill_keyword = any(k in title for k in chill_keywords)
+    is_hype_keyword = any(k in genre for k in HYPE_KEYWORDS)
+    is_chill_keyword = any(k in genre for k in CHILL_KEYWORDS)
 
     if genre == favorite_genre or energy >= hype_min_energy or is_hype_keyword:
         return "Hype"
@@ -100,7 +101,7 @@ def build_playlists(songs: List[Song], profile: Dict[str, object]) -> PlaylistMa
 def merge_playlists(a: PlaylistMap, b: PlaylistMap) -> PlaylistMap:
     """Merge two playlist maps into a new map."""
     merged: PlaylistMap = {}
-    for key in set(list(a.keys()) + list(b.keys())):
+    for key in set(a) | set(b):
         merged[key] = a.get(key, [])
         merged[key].extend(b.get(key, []))
     return merged
@@ -116,13 +117,13 @@ def compute_playlist_stats(playlists: PlaylistMap) -> Dict[str, object]:
     chill = playlists.get("Chill", [])
     mixed = playlists.get("Mixed", [])
 
-    total = len(hype)
+    total = len(all_songs)
     hype_ratio = len(hype) / total if total > 0 else 0.0
 
     avg_energy = 0.0
     if all_songs:
-        total_energy = sum(song.get("energy", 0) for song in hype)
-        avg_energy = total_energy / len(all_songs)
+        total_energy = sum(song.get("energy", 0) for song in all_songs)
+        avg_energy = total_energy / total
 
     top_artist, top_count = most_common_artist(all_songs)
 
@@ -140,18 +141,15 @@ def compute_playlist_stats(playlists: PlaylistMap) -> Dict[str, object]:
 
 def most_common_artist(songs: List[Song]) -> Tuple[str, int]:
     """Return the most common artist and count."""
-    counts: Dict[str, int] = {}
-    for song in songs:
-        artist = str(song.get("artist", ""))
-        if not artist:
-            continue
-        counts[artist] = counts.get(artist, 0) + 1
-
+    counts = Counter(
+        str(song.get("artist", ""))
+        for song in songs
+        if song.get("artist", "")
+    )
     if not counts:
         return "", 0
-
-    items = sorted(counts.items(), key=lambda item: item[1], reverse=True)
-    return items[0]
+    artist, count = counts.most_common(1)[0]
+    return artist, count
 
 
 def search_songs(
